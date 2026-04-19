@@ -20,13 +20,30 @@ bashio::log.warning() {
 }
 
 bashio::config.exists() {
-  [[ "$1" == "databases[0].owner" ]]
+  case "$1" in
+    roles[0].password|roles[0].login|databases[0].owner)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 bashio::config() {
   local key="$1"
 
-  if [[ "$key" == "memberships|length" ]]; then
+  if [[ "$key" == "roles|length" ]]; then
+    printf '1\n'
+  elif [[ "$key" == "roles|keys" ]]; then
+    printf '0\n'
+  elif [[ "$key" == "roles[0].username" ]]; then
+    printf 'app_login\n'
+  elif [[ "$key" == "roles[0].login" ]]; then
+    printf 'true\n'
+  elif [[ "$key" == "roles[0].password" ]]; then
+    printf 'resolved-secret-token\n'
+  elif [[ "$key" == "memberships|length" ]]; then
     printf '1\n'
   elif [[ "$key" == "memberships|keys" ]]; then
     printf '0\n'
@@ -120,7 +137,7 @@ cat >"${tmpdir}/bin/psql-apply-file" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
-printf 'APPLY:%s\n' "$*" >>"${TRACE_FILE}"
+printf 'APPLY:%s\n' "${1:-}" >>"${TRACE_FILE}"
 EOF
 chmod +x "${tmpdir}/bin/psql-apply-file"
 
@@ -133,6 +150,8 @@ PSQL_APPLY_FILE="${tmpdir}/bin/psql-apply-file" \
 bash rootfs/usr/bin/provision-postgres >/dev/null 2>"${tmpdir}/stderr.log"
 
 grep -q "drift.sql" "${trace_file}"
+! grep -q "resolved-secret-token" "${trace_file}"
+! grep -q "resolved-secret-token" "${tmpdir}/stderr.log"
 grep -q "WARN: postgres drift: object_type=membership context=extra_group subject_role=extra_member extra_privilege=MEMBER" "${tmpdir}/stderr.log"
 grep -q "WARN: postgres drift: object_type=database context=appdb subject_role=PUBLIC extra_privilege=CONNECT" "${tmpdir}/stderr.log"
 grep -q "WARN: postgres drift: object_type=schema context=public subject_role=PUBLIC extra_privilege=USAGE" "${tmpdir}/stderr.log"

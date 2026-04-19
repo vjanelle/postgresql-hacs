@@ -35,4 +35,4 @@ network:
 
 When `ssl.enabled` is `true`, also provide `ssl.certfile` and `ssl.keyfile`. `ssl.certfile` must be readable by the PostgreSQL runtime user. `ssl.keyfile` must be owned by the PostgreSQL runtime user and use mode `400` or `600`.
 
-v1 is additive-only: it creates missing roles, databases, memberships, and grants, and leaves existing access drift in place with warnings.
+v1 is additive-only: it creates missing roles, databases, memberships, and grants, and leaves existing access drift in place with warnings. Drift warnings cover undeclared memberships plus undeclared database and schema privileges, including `PUBLIC` ACL entries.
