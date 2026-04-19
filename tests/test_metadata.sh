@@ -44,3 +44,9 @@ grep -q "^ssl:$" DOCS.md
 grep -q "^network:$" DOCS.md
 ! grep -Eq '^(schemas|admins|extensions):' README.md
 ! grep -Eq '^(schemas|admins|extensions):' DOCS.md
+grep -q "^build_from:$" build.yaml
+grep -q "^  aarch64: ghcr.io/home-assistant/aarch64-base-debian:bookworm$" build.yaml
+grep -q "^  amd64: ghcr.io/home-assistant/amd64-base-debian:bookworm$" build.yaml
+grep -q "^  armv7: ghcr.io/home-assistant/armv7-base-debian:bookworm$" build.yaml
+grep -q "^  armhf: ghcr.io/home-assistant/armhf-base-debian:bookworm$" build.yaml
+grep -q "^  i386: ghcr.io/home-assistant/i386-base-debian:bookworm$" build.yaml
