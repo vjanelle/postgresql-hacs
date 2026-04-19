@@ -13,14 +13,24 @@ mkdir -p "${DATA_DIR}" "${RUNTIME_DIR}"
 
 runtime_uid="${POSTGRES_RUNTIME_UID:-}"
 runtime_gid="${POSTGRES_RUNTIME_GID:-}"
+runtime_supplementary_gids_raw="${POSTGRES_RUNTIME_SUPPLEMENTARY_GIDS:-}"
 if [[ -z "${runtime_uid}" || -z "${runtime_gid}" ]]; then
   runtime_uid="$(id -u postgres)"
   runtime_gid="$(id -g postgres)"
 fi
 
+if [[ -z "${runtime_supplementary_gids_raw}" ]]; then
+  runtime_supplementary_gids_raw="$(id -G postgres 2>/dev/null || true)"
+fi
+
+runtime_supplementary_gids=()
+if [[ -n "${runtime_supplementary_gids_raw}" ]]; then
+  read -r -a runtime_supplementary_gids <<< "${runtime_supplementary_gids_raw}"
+fi
+
 can_runtime_user_read() {
   local path="$1"
-  local file_uid file_gid file_mode
+  local file_uid file_gid file_mode group_gid
 
   read -r file_uid file_gid file_mode < <(stat -c '%u %g %a' "${path}")
 
@@ -32,9 +42,36 @@ can_runtime_user_read() {
     (( 8#${file_mode} & 0040 )) && return 0
   fi
 
+  for group_gid in "${runtime_supplementary_gids[@]}"; do
+    if [[ "${group_gid}" == "${file_gid}" ]]; then
+      (( 8#${file_mode} & 0040 )) && return 0
+    fi
+  done
+
   (( 8#${file_mode} & 0004 )) && return 0
 
   return 1
+}
+
+validate_private_key_file() {
+  local path="$1"
+  local file_uid file_gid file_mode
+
+  read -r file_uid file_gid file_mode < <(stat -c '%u %g %a' "${path}")
+
+  if [[ "${file_uid}" != "${runtime_uid}" ]]; then
+    return 1
+  fi
+
+  case "${file_mode}" in
+    400|600)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  return 0
 }
 
 ssl_enabled="$(bashio::config 'ssl.enabled')"
@@ -51,16 +88,7 @@ if bashio::var.true "${ssl_enabled}"; then
   fi
 
   can_runtime_user_read "${ssl_cert_file}" || bashio::exit.nok "ssl.certfile must be readable by the postgres runtime user"
-  can_runtime_user_read "${ssl_key_file}" || bashio::exit.nok "ssl.keyfile must be readable by the postgres runtime user"
-
-  key_mode="$(stat -c '%a' "${ssl_key_file}")"
-  case "${key_mode}" in
-    400|440|600|640)
-      ;;
-    *)
-      bashio::exit.nok "ssl.keyfile must have restrictive permissions"
-      ;;
-  esac
+  validate_private_key_file "${ssl_key_file}" || bashio::exit.nok "ssl.keyfile must be owned by the postgres runtime user and have mode 400 or 600"
 
   ssl_setting="on"
 fi

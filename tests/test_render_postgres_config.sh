@@ -91,15 +91,18 @@ render() {
     bash rootfs/usr/bin/render-postgres-config
 }
 
-runtime_uid=12345
-runtime_gid="$(id -g)"
+owner_uid="$(id -u)"
+file_gid="$(id -g)"
+primary_gid="$((file_gid + 1))"
+supplementary_gids="${file_gid}"
 
 ssl_off_dir="${tmpdir}/ssl-off"
 mkdir -p "${ssl_off_dir}"
 render "${ssl_off_dir}" \
   BASHIO_SSL_ENABLED=false \
-  POSTGRES_RUNTIME_UID="${runtime_uid}" \
-  POSTGRES_RUNTIME_GID="${runtime_gid}" \
+  POSTGRES_RUNTIME_UID="$((owner_uid + 1))" \
+  POSTGRES_RUNTIME_GID="${primary_gid}" \
+  POSTGRES_RUNTIME_SUPPLEMENTARY_GIDS="${supplementary_gids}" \
   BASHIO_ALLOWLIST=$'10.0.0.0/24\n192.168.1.0/24'
 
 grep -q "^listen_addresses = " "${ssl_off_dir}/postgresql.conf"
@@ -123,7 +126,7 @@ key_file="${tmpdir}/server.key"
 : > "${cert_file}"
 : > "${key_file}"
 chmod 640 "${cert_file}"
-chmod 640 "${key_file}"
+chmod 600 "${key_file}"
 
 ssl_on_dir="${tmpdir}/ssl-on"
 mkdir -p "${ssl_on_dir}"
@@ -131,8 +134,9 @@ render "${ssl_on_dir}" \
   BASHIO_SSL_ENABLED=true \
   BASHIO_SSL_CERTFILE="${cert_file}" \
   BASHIO_SSL_KEYFILE="${key_file}" \
-  POSTGRES_RUNTIME_UID="${runtime_uid}" \
-  POSTGRES_RUNTIME_GID="${runtime_gid}" \
+  POSTGRES_RUNTIME_UID="${owner_uid}" \
+  POSTGRES_RUNTIME_GID="${primary_gid}" \
+  POSTGRES_RUNTIME_SUPPLEMENTARY_GIDS="${supplementary_gids}" \
   BASHIO_ALLOWLIST=$'10.0.0.0/24\n192.168.1.0/24'
 
 grep -q "^ssl = on$" "${ssl_on_dir}/postgresql.conf"
@@ -140,6 +144,23 @@ grep -q "^ssl_cert_file = '${cert_file}'$" "${ssl_on_dir}/postgresql.conf"
 grep -q "^ssl_key_file = '${key_file}'$" "${ssl_on_dir}/postgresql.conf"
 grep -q "^hostssl all all 10.0.0.0/24 scram-sha-256$" "${ssl_on_dir}/pg_hba.conf"
 grep -q "^hostssl all all 192.168.1.0/24 scram-sha-256$" "${ssl_on_dir}/pg_hba.conf"
+
+bad_key_dir="${tmpdir}/bad-key"
+mkdir -p "${bad_key_dir}"
+bad_key_file="${tmpdir}/bad-server.key"
+: > "${bad_key_file}"
+chmod 640 "${bad_key_file}"
+
+if render "${bad_key_dir}" \
+  BASHIO_SSL_ENABLED=true \
+  BASHIO_SSL_CERTFILE="${cert_file}" \
+  BASHIO_SSL_KEYFILE="${bad_key_file}" \
+  POSTGRES_RUNTIME_UID="${owner_uid}" \
+  POSTGRES_RUNTIME_GID="${primary_gid}" \
+  POSTGRES_RUNTIME_SUPPLEMENTARY_GIDS="${supplementary_gids}" \
+  BASHIO_ALLOWLIST=$'10.0.0.0/24'; then
+  exit 1
+fi
 
 bad_cert_dir="${tmpdir}/bad-cert"
 mkdir -p "${bad_cert_dir}"
@@ -151,8 +172,9 @@ if render "${bad_cert_dir}" \
   BASHIO_SSL_ENABLED=true \
   BASHIO_SSL_CERTFILE="${bad_cert_file}" \
   BASHIO_SSL_KEYFILE="${key_file}" \
-  POSTGRES_RUNTIME_UID="${runtime_uid}" \
-  POSTGRES_RUNTIME_GID="${runtime_gid}" \
+  POSTGRES_RUNTIME_UID="$((owner_uid + 1))" \
+  POSTGRES_RUNTIME_GID="${primary_gid}" \
+  POSTGRES_RUNTIME_SUPPLEMENTARY_GIDS="" \
   BASHIO_ALLOWLIST=$'10.0.0.0/24'; then
   exit 1
 fi
