@@ -16,6 +16,15 @@ roles:
 databases:
   - name: appdb
     owner: app_login
+memberships:
+  - group: app_role
+    member: app_login
+grants:
+  - database: appdb
+    role: app_role
+    privileges:
+      - SELECT
+      - INSERT
 schemas:
   - database: appdb
     name: app_schema
