@@ -61,6 +61,12 @@ bashio::config() {
     printf 'app_role\n'
   elif [[ "$key" == "grants[0].privileges" ]]; then
     printf 'SELECT\n'
+  elif [[ "$key" == "databases|length" ]]; then
+    printf '1\n'
+  elif [[ "$key" == "databases|keys" ]]; then
+    printf '0\n'
+  elif [[ "$key" == "databases[0].name" ]]; then
+    printf 'appdb\n'
   elif [[ "$key" == "databases[0].owner" ]]; then
     printf 'app_owner\n'
   else
@@ -94,11 +100,33 @@ set -euo pipefail
 
 sql=""
 file=""
+db_name=""
+include_memberships=""
+include_database_privileges=""
+include_schema_privileges=""
 
 printf 'PSQL:%s\n' "$*" >>"${TRACE_FILE}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --dbname)
+      db_name="$2"
+      shift 2
+      ;;
+    -v)
+      case "$2" in
+        include_memberships=1)
+          include_memberships=1
+          ;;
+        include_database_privileges=1)
+          include_database_privileges=1
+          ;;
+        include_schema_privileges=1)
+          include_schema_privileges=1
+          ;;
+      esac
+      shift 2
+      ;;
     --command)
       sql="$2"
       shift 2
@@ -114,11 +142,27 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -n "${file}" && "${file}" == *drift.sql ]]; then
-  printf 'membership\tdeclared_group\tdeclared_member\tMEMBER\n'
-  printf 'membership\textra_group\textra_member\tMEMBER\n'
-  printf 'database\tappdb\tapp_role\tCONNECT\n'
-  printf 'database\tappdb\tPUBLIC\tCONNECT\n'
-  printf 'schema\tpublic\tPUBLIC\tUSAGE\n'
+  drift_sql="$(cat rootfs/usr/share/postgresql/bootstrap/drift.sql)"
+  if [[ -n "${include_memberships}" ]]; then
+    printf 'membership\tdeclared_group\tdeclared_member\tMEMBER\n'
+    printf 'membership\textra_group\textra_member\tMEMBER\n'
+  fi
+  if [[ -n "${include_database_privileges}" ]]; then
+    printf 'database\t%s\tapp_role\tCONNECT\n' "${db_name}"
+    printf 'database\t%s\tapp_owner\tCONNECT\n' "${db_name}"
+    printf 'database\ttemplate1\tPUBLIC\tCONNECT\n'
+    if ! grep -q 'd.datacl IS NOT NULL' <<<"${drift_sql}"; then
+      printf 'database\t%s\tPUBLIC\tCONNECT\n' "${db_name}"
+    fi
+  fi
+  if [[ -n "${include_schema_privileges}" ]]; then
+    printf 'schema\tpublic\tapp_role\tUSAGE\n'
+    printf 'schema\tpublic\tapp_owner\tUSAGE\n'
+    printf 'schema\tinformation_schema\tPUBLIC\tUSAGE\n'
+    if ! grep -q 'n.nspacl IS NOT NULL' <<<"${drift_sql}"; then
+      printf 'schema\tpublic\tPUBLIC\tUSAGE\n'
+    fi
+  fi
   exit 0
 fi
 
@@ -128,6 +172,9 @@ case "${sql}" in
     ;;
   *"SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = 'appdb';"*)
     printf 'app_owner\n'
+    ;;
+  *"SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'public';"*)
+    printf 'public_owner\n'
     ;;
 esac
 EOF
@@ -150,10 +197,15 @@ PSQL_APPLY_FILE="${tmpdir}/bin/psql-apply-file" \
 bash rootfs/usr/bin/provision-postgres >/dev/null 2>"${tmpdir}/stderr.log"
 
 grep -q "drift.sql" "${trace_file}"
+grep -q "SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'public';" "${trace_file}"
 ! grep -q "resolved-secret-token" "${trace_file}"
 ! grep -q "resolved-secret-token" "${tmpdir}/stderr.log"
 grep -q "WARN: postgres drift: object_type=membership context=extra_group subject_role=extra_member extra_privilege=MEMBER" "${tmpdir}/stderr.log"
 grep -q "WARN: postgres drift: object_type=database context=appdb subject_role=PUBLIC extra_privilege=CONNECT" "${tmpdir}/stderr.log"
-grep -q "WARN: postgres drift: object_type=schema context=public subject_role=PUBLIC extra_privilege=USAGE" "${tmpdir}/stderr.log"
-test "$(grep -c '^WARN: postgres drift:' "${tmpdir}/stderr.log")" -eq 3
+grep -q "WARN: postgres drift: database=appdb object_type=schema context=public subject_role=app_owner extra_privilege=USAGE" "${tmpdir}/stderr.log"
+grep -q "WARN: postgres drift: database=appdb object_type=schema context=public subject_role=PUBLIC extra_privilege=USAGE" "${tmpdir}/stderr.log"
+test "$(grep -c '^WARN: postgres drift:' "${tmpdir}/stderr.log")" -eq 4
+! grep -q "context=appdb subject_role=app_owner" "${tmpdir}/stderr.log"
+! grep -q "context=template1" "${tmpdir}/stderr.log"
+! grep -q "context=information_schema" "${tmpdir}/stderr.log"
 grep -q "v1 is additive-only" DOCS.md

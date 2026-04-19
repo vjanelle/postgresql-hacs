@@ -36,3 +36,16 @@ network:
 ```
 
 When `ssl.enabled` is `true`, also provide `ssl.certfile` and `ssl.keyfile`. `ssl.certfile` must be readable by the PostgreSQL runtime user. `ssl.keyfile` must be owned by the PostgreSQL runtime user and use mode `400` or `600`.
+
+## Integration Tests
+
+The container-backed integration checks live in `tests/integration/`. They build the add-on image, start a throwaway container, and probe it with `psql` across first boot, restart, SSL, and extension paths.
+
+Run them with:
+
+```bash
+bash tests/integration/test_first_boot.sh
+bash tests/integration/test_restart_idempotent.sh
+bash tests/integration/test_ssl.sh
+bash tests/integration/test_extensions.sh
+```

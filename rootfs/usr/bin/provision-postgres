@@ -101,6 +101,55 @@ apply_file() {
 declare -A declared_memberships=()
 declare -A declared_database_privileges=()
 declare -A declared_schema_privileges=()
+declare -A emitted_drift_warnings=()
+
+emit_drift_warnings() {
+  local database="$1"
+  local current_database_owner="$2"
+  local current_schema_owner="$3"
+  shift 3
+
+  while IFS=$'\t' read -r object_type object_context subject_role extra_privilege; do
+    [[ -z "${object_type:-}" ]] && continue
+
+    case "${object_type}" in
+      membership)
+        key="${object_context}"$'\t'"${subject_role}"
+        if [[ -z "${declared_memberships[${key}]:-}" ]]; then
+          warning="postgres drift: object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
+          if [[ -z "${emitted_drift_warnings[${warning}]:-}" ]]; then
+            emitted_drift_warnings["${warning}"]=1
+            bashio::log.warning "${warning}"
+          fi
+        fi
+        ;;
+      database)
+        [[ "${object_context}" != "${database}" ]] && continue
+        [[ "${subject_role}" == "${current_database_owner}" ]] && continue
+        key="${object_context}"$'\t'"${subject_role}"$'\t'"${extra_privilege}"
+        if [[ -z "${declared_database_privileges[${key}]:-}" ]]; then
+          warning="postgres drift: object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
+          if [[ -z "${emitted_drift_warnings[${warning}]:-}" ]]; then
+            emitted_drift_warnings["${warning}"]=1
+            bashio::log.warning "${warning}"
+          fi
+        fi
+        ;;
+      schema)
+        [[ "${object_context}" != "public" ]] && continue
+        [[ "${subject_role}" == "${current_schema_owner}" ]] && continue
+        key="${object_context}"$'\t'"${subject_role}"$'\t'"${extra_privilege}"
+        if [[ -z "${declared_schema_privileges[${key}]:-}" ]]; then
+          warning="postgres drift: database=${database} object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
+          if [[ -z "${emitted_drift_warnings[${warning}]:-}" ]]; then
+            emitted_drift_warnings["${warning}"]=1
+            bashio::log.warning "${warning}"
+          fi
+        fi
+        ;;
+    esac
+  done
+}
 
 if [[ "$(bashio::config 'roles|length')" -gt 0 ]]; then
   for role in $(bashio::config 'roles|keys'); do
@@ -197,29 +246,24 @@ EOF
   done
 fi
 
-if [[ "$(bashio::config 'memberships|length')" -gt 0 || "$(bashio::config 'grants|length')" -gt 0 ]]; then
-  while IFS=$'\t' read -r object_type object_context subject_role extra_privilege; do
-    [[ -z "${object_type:-}" ]] && continue
+if [[ "$(bashio::config 'memberships|length')" -gt 0 ]]; then
+  emit_drift_warnings "${ADMIN_DB}" "" "" < <(
+    psql_query_file "${ADMIN_DB}" "${BOOTSTRAP_DIR}/drift.sql" \
+      -v include_memberships=1
+  )
+fi
 
-    case "${object_type}" in
-      membership)
-        key="${object_context}"$'\t'"${subject_role}"
-        if [[ -z "${declared_memberships[${key}]:-}" ]]; then
-          bashio::log.warning "postgres drift: object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
-        fi
-        ;;
-      database)
-        key="${object_context}"$'\t'"${subject_role}"$'\t'"${extra_privilege}"
-        if [[ -z "${declared_database_privileges[${key}]:-}" ]]; then
-          bashio::log.warning "postgres drift: object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
-        fi
-        ;;
-      schema)
-        key="${object_context}"$'\t'"${subject_role}"$'\t'"${extra_privilege}"
-        if [[ -z "${declared_schema_privileges[${key}]:-}" ]]; then
-          bashio::log.warning "postgres drift: object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
-        fi
-        ;;
-    esac
-  done < <(psql_query_file "${ADMIN_DB}" "${BOOTSTRAP_DIR}/drift.sql")
+if [[ "$(bashio::config 'databases|length')" -gt 0 ]]; then
+  for database in $(bashio::config 'databases|keys'); do
+    db_name="$(bashio::config "databases[${database}].name")"
+    current_database_owner="$(db_owner "$(sql_literal "${db_name}")")"
+    current_database_owner="${current_database_owner//$'\n'/}"
+    current_schema_owner="$(psql_scalar "${db_name}" "SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'public';")"
+    current_schema_owner="${current_schema_owner//$'\n'/}"
+    emit_drift_warnings "${db_name}" "${current_database_owner}" "${current_schema_owner}" < <(
+      psql_query_file "${db_name}" "${BOOTSTRAP_DIR}/drift.sql" \
+        -v include_database_privileges=1 \
+        -v include_schema_privileges=1
+    )
+  done
 fi
