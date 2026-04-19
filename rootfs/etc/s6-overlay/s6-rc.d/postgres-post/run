@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /usr/lib/bashio/bashio
+
+readonly RUNTIME_DIR="/run/postgresql"
+
+until pg_isready -h "${RUNTIME_DIR}" -p 5432 -U postgres >/dev/null 2>&1; do
+  sleep 1
+done
+
+if [[ -x /usr/local/bin/provisioning-entrypoint ]]; then
+  /usr/local/bin/provisioning-entrypoint
+fi
+
+bashio::log.info "PostgreSQL 18 ready"

@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /usr/lib/bashio/bashio
+
+readonly DATA_DIR="/data/postgres"
+readonly RUNTIME_DIR="/run/postgresql"
+readonly LOG_DIR="/var/log/postgresql"
+readonly CONF_FILE="${DATA_DIR}/postgresql.conf"
+readonly HBA_FILE="${DATA_DIR}/pg_hba.conf"
+readonly IDENT_FILE="${DATA_DIR}/pg_ident.conf"
+
+mkdir -p "${DATA_DIR}" "${RUNTIME_DIR}" "${LOG_DIR}"
+chown -R postgres:postgres "${DATA_DIR}" "${RUNTIME_DIR}" "${LOG_DIR}"
+
+SSL_ENABLED="$(bashio::config 'ssl.enabled')"
+
+SSL_SETTING="off"
+if bashio::var.true "${SSL_ENABLED}"; then
+  SSL_CERT_FILE="$(bashio::config 'ssl.certfile')"
+  SSL_KEY_FILE="$(bashio::config 'ssl.keyfile')"
+
+  if [[ -z "${SSL_CERT_FILE}" || -z "${SSL_KEY_FILE}" ]]; then
+    bashio::exit.nok "ssl.enabled requires ssl.certfile and ssl.keyfile"
+  fi
+
+  test -f "${SSL_CERT_FILE}"
+  test -f "${SSL_KEY_FILE}"
+
+  SSL_SETTING="on"
+fi
+
+cat > "${CONF_FILE}" <<EOF
+listen_addresses = '*'
+unix_socket_directories = '${RUNTIME_DIR}'
+data_directory = '${DATA_DIR}'
+hba_file = '${HBA_FILE}'
+ident_file = '${IDENT_FILE}'
+ssl = ${SSL_SETTING}
+$(if bashio::var.true "${SSL_ENABLED}"; then
+  printf "ssl_cert_file = '%s'\n" "${SSL_CERT_FILE}"
+  printf "ssl_key_file = '%s'\n" "${SSL_KEY_FILE}"
+fi)
+shared_preload_libraries = 'timescaledb'
+EOF
+
+cat > "${HBA_FILE}" <<'EOF'
+local all all trust
+host all all all scram-sha-256
+EOF
+
+: > "${IDENT_FILE}"
+chown postgres:postgres "${CONF_FILE}" "${HBA_FILE}" "${IDENT_FILE}"
+
+if [[ ! -f "${DATA_DIR}/PG_VERSION" ]]; then
+  bashio::log.info "Initializing PostgreSQL 18 cluster"
+  runuser -u postgres -- initdb \
+    -D "${DATA_DIR}" \
+    --username=postgres \
+    --encoding=UTF8 \
+    --locale=C.UTF-8 \
+    --auth-local=trust \
+    --auth-host=scram-sha-256
+fi

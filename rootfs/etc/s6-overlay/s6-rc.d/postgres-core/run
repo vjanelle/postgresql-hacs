@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly DATA_DIR="/data/postgres"
+readonly RUNTIME_DIR="/run/postgresql"
+
+exec runuser -u postgres -- /usr/lib/postgresql/18/bin/postgres \
+  -D "${DATA_DIR}" \
+  -c config_file="${DATA_DIR}/postgresql.conf" \
+  -c hba_file="${DATA_DIR}/pg_hba.conf" \
+  -c ident_file="${DATA_DIR}/pg_ident.conf" \
+  -c unix_socket_directories="${RUNTIME_DIR}" \
+  -c shared_preload_libraries='timescaledb'
