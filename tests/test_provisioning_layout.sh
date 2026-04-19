@@ -3,6 +3,7 @@ set -euo pipefail
 
 for path in \
   postgresql18-addon/rootfs/usr/bin/provision-postgres \
+  postgresql18-addon/rootfs/usr/bin/psql-apply-file \
   postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/roles.sql \
   postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/memberships.sql \
   postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/databases.sql \
@@ -11,4 +12,12 @@ for path in \
   postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/grants.sql
 do
   test -f "$path"
+done
+
+for path in \
+  postgresql18-addon/rootfs/usr/bin/provision-postgres \
+  postgresql18-addon/rootfs/usr/bin/psql-apply-file \
+  postgresql18-addon/rootfs/usr/local/bin/provisioning-entrypoint
+do
+  test -x "$path"
 done
