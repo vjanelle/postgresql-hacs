@@ -12,11 +12,16 @@ sql_literal() {
   printf "'%s'" "${value}"
 }
 
+sql_ident() {
+  local value="${1//\"/\"\"}"
+  printf '"%s"' "${value}"
+}
+
 join_privileges() {
   local raw="$1"
   local -a items=()
   local item
-  read -r -a items <<< "${raw}"
+  mapfile -t items <<< "${raw}"
 
   local joined=""
   for item in "${items[@]}"; do
@@ -110,6 +115,15 @@ if [[ "$(bashio::config 'databases|length')" -gt 0 ]]; then
 
     if bashio::config.exists "databases[${database}].owner"; then
       db_owner_name="$(bashio::config "databases[${database}].owner")"
+    fi
+
+    db_name_literal="$(sql_literal "${db_name}")"
+    if [[ -z "$(psql_scalar "${ADMIN_DB}" "SELECT 1 FROM pg_database WHERE datname = ${db_name_literal};")" ]]; then
+      if [[ -n "${db_owner_name}" ]]; then
+        psql_exec "${ADMIN_DB}" "CREATE DATABASE $(sql_ident "${db_name}") OWNER $(sql_ident "${db_owner_name}");"
+      else
+        psql_exec "${ADMIN_DB}" "CREATE DATABASE $(sql_ident "${db_name}");"
+      fi
     fi
 
     apply_file "${ADMIN_DB}" "${BOOTSTRAP_DIR}/databases.sql" \
