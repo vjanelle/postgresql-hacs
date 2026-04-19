@@ -15,7 +15,8 @@ for path in \
   postgresql18-addon/rootfs/etc/s6-overlay/s6-rc.d/postgres/contents.d/postgres-pre \
   postgresql18-addon/rootfs/etc/s6-overlay/s6-rc.d/postgres/contents.d/postgres-core \
   postgresql18-addon/rootfs/etc/s6-overlay/s6-rc.d/postgres/contents.d/postgres-post \
-  postgresql18-addon/rootfs/etc/s6-overlay/s6-rc.d/user/contents.d/postgres
+  postgresql18-addon/rootfs/etc/s6-overlay/s6-rc.d/user/contents.d/postgres \
+  postgresql18-addon/rootfs/usr/local/bin/provisioning-entrypoint
 do
   test -f "$path"
 done

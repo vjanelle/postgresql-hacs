@@ -6,9 +6,6 @@ source /usr/lib/bashio/bashio
 readonly DATA_DIR="/data/postgres"
 readonly RUNTIME_DIR="/run/postgresql"
 readonly LOG_DIR="/var/log/postgresql"
-readonly CONF_FILE="${DATA_DIR}/postgresql.conf"
-readonly HBA_FILE="${DATA_DIR}/pg_hba.conf"
-readonly IDENT_FILE="${DATA_DIR}/pg_ident.conf"
 
 mkdir -p "${DATA_DIR}" "${RUNTIME_DIR}" "${LOG_DIR}"
 chown -R postgres:postgres "${DATA_DIR}" "${RUNTIME_DIR}" "${LOG_DIR}"
@@ -29,6 +26,21 @@ if bashio::var.true "${SSL_ENABLED}"; then
 
   SSL_SETTING="on"
 fi
+
+if [[ ! -f "${DATA_DIR}/PG_VERSION" ]]; then
+  bashio::log.info "Initializing PostgreSQL 18 cluster"
+  runuser -u postgres -- initdb \
+    -D "${DATA_DIR}" \
+    --username=postgres \
+    --encoding=UTF8 \
+    --locale=C.UTF-8 \
+    --auth-local=trust \
+    --auth-host=scram-sha-256
+fi
+
+readonly CONF_FILE="${DATA_DIR}/postgresql.conf"
+readonly HBA_FILE="${DATA_DIR}/pg_hba.conf"
+readonly IDENT_FILE="${DATA_DIR}/pg_ident.conf"
 
 cat > "${CONF_FILE}" <<EOF
 listen_addresses = '*'
@@ -51,14 +63,3 @@ EOF
 
 : > "${IDENT_FILE}"
 chown postgres:postgres "${CONF_FILE}" "${HBA_FILE}" "${IDENT_FILE}"
-
-if [[ ! -f "${DATA_DIR}/PG_VERSION" ]]; then
-  bashio::log.info "Initializing PostgreSQL 18 cluster"
-  runuser -u postgres -- initdb \
-    -D "${DATA_DIR}" \
-    --username=postgres \
-    --encoding=UTF8 \
-    --locale=C.UTF-8 \
-    --auth-local=trust \
-    --auth-host=scram-sha-256
-fi

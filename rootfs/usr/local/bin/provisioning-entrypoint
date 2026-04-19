@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /usr/lib/bashio/bashio
+
+readonly SOCKET_DIR="/run/postgresql"
+readonly ADMIN_DB="postgres"
+
+sql_ident() {
+  local value="${1//\"/\"\"}"
+  printf '"%s"' "${value}"
+}
+
+sql_literal() {
+  local value="${1//\'/\'\'}"
+  printf "'%s'" "${value}"
+}
+
+join_privileges() {
+  local raw="$1"
+  local -a items=()
+  local item
+  read -r -a items <<< "${raw}"
+
+  local joined=""
+  for item in "${items[@]}"; do
+    [[ -z "${item}" ]] && continue
+    if [[ -n "${joined}" ]]; then
+      joined+=", "
+    fi
+    joined+="${item}"
+  done
+
+  printf "%s" "${joined}"
+}
+
+psql_exec() {
+  local db_name="$1"
+  local sql="$2"
+
+  runuser -u postgres -- psql \
+    --no-psqlrc \
+    --quiet \
+    --set=ON_ERROR_STOP=1 \
+    --host "${SOCKET_DIR}" \
+    --username postgres \
+    --dbname "${db_name}" \
+    --command "${sql}"
+}
+
+psql_scalar() {
+  local db_name="$1"
+  local sql="$2"
+
+  runuser -u postgres -- psql \
+    --no-psqlrc \
+    --quiet \
+    --tuples-only \
+    --no-align \
+    --set=ON_ERROR_STOP=1 \
+    --host "${SOCKET_DIR}" \
+    --username postgres \
+    --dbname "${db_name}" \
+    --command "${sql}"
+}
+
+if [[ "$(bashio::config 'roles|length')" -gt 0 ]]; then
+  for role in $(bashio::config 'roles|keys'); do
+    username="$(bashio::config "roles[${role}].username")"
+    login="false"
+    password=""
+
+    if bashio::config.exists "roles[${role}].login"; then
+      login="$(bashio::config "roles[${role}].login")"
+    fi
+    if bashio::config.exists "roles[${role}].password"; then
+      password="$(bashio::config "roles[${role}].password")"
+    fi
+
+    role_ident="$(sql_ident "${username}")"
+    role_literal="$(sql_literal "${username}")"
+
+    if bashio::var.true "${login}"; then
+      if [[ -n "${password}" ]]; then
+        password_literal="$(sql_literal "${password}")"
+        psql_exec "${ADMIN_DB}" "$(cat <<EOF
+DO \$\$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${role_literal}) THEN
+    EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', ${role_literal}, ${password_literal});
+  ELSE
+    EXECUTE format('CREATE ROLE %I WITH LOGIN PASSWORD %L', ${role_literal}, ${password_literal});
+  END IF;
+END
+\$\$;
+EOF
+)"
+      else
+        psql_exec "${ADMIN_DB}" "$(cat <<EOF
+DO \$\$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${role_literal}) THEN
+    EXECUTE format('ALTER ROLE %I WITH LOGIN', ${role_literal});
+  ELSE
+    EXECUTE format('CREATE ROLE %I WITH LOGIN', ${role_literal});
+  END IF;
+END
+\$\$;
+EOF
+)"
+      fi
+    else
+      psql_exec "${ADMIN_DB}" "$(cat <<EOF
+DO \$\$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${role_literal}) THEN
+    EXECUTE format('ALTER ROLE %I NOLOGIN', ${role_literal});
+  ELSE
+    EXECUTE format('CREATE ROLE %I NOLOGIN', ${role_literal});
+  END IF;
+END
+\$\$;
+EOF
+)"
+    fi
+  done
+fi
+
+if [[ "$(bashio::config 'databases|length')" -gt 0 ]]; then
+  for database in $(bashio::config 'databases|keys'); do
+    db_name="$(bashio::config "databases[${database}].name")"
+    db_owner=""
+
+    if bashio::config.exists "databases[${database}].owner"; then
+      db_owner="$(bashio::config "databases[${database}].owner")"
+    fi
+
+    db_ident="$(sql_ident "${db_name}")"
+    db_literal="$(sql_literal "${db_name}")"
+
+    if [[ -z "$(psql_scalar "${ADMIN_DB}" "SELECT 1 FROM pg_database WHERE datname = ${db_literal};")" ]]; then
+      if [[ -n "${db_owner}" ]]; then
+        psql_exec "${ADMIN_DB}" "CREATE DATABASE ${db_ident} OWNER $(sql_ident "${db_owner}");"
+      else
+        psql_exec "${ADMIN_DB}" "CREATE DATABASE ${db_ident};"
+      fi
+    fi
+  done
+fi
+
+if [[ "$(bashio::config 'memberships|length')" -gt 0 ]]; then
+  for membership in $(bashio::config 'memberships|keys'); do
+    group_name="$(bashio::config "memberships[${membership}].group")"
+    member_name="$(bashio::config "memberships[${membership}].member")"
+    psql_exec "${ADMIN_DB}" "GRANT $(sql_ident "${group_name}") TO $(sql_ident "${member_name}");"
+  done
+fi
+
+if [[ "$(bashio::config 'grants|length')" -gt 0 ]]; then
+  for grant in $(bashio::config 'grants|keys'); do
+    grant_db="$(bashio::config "grants[${grant}].database")"
+    grant_role="$(bashio::config "grants[${grant}].role")"
+    grant_privileges_raw="$(bashio::config "grants[${grant}].privileges")"
+    grant_privileges="$(join_privileges "${grant_privileges_raw}")"
+
+    psql_exec "${ADMIN_DB}" "GRANT CONNECT ON DATABASE $(sql_ident "${grant_db}") TO $(sql_ident "${grant_role}");"
+    psql_exec "${grant_db}" "GRANT USAGE ON SCHEMA public TO $(sql_ident "${grant_role}");"
+    psql_exec "${grant_db}" "GRANT ${grant_privileges} ON ALL TABLES IN SCHEMA public TO $(sql_ident "${grant_role}");"
+  done
+fi
