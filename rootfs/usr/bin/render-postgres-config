@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source "${BASHIO_LIB:-/usr/lib/bashio/bashio}"
+
+readonly DATA_DIR="${POSTGRES_DATA_DIR:-/data/postgres}"
+readonly RUNTIME_DIR="${POSTGRES_RUNTIME_DIR:-/run/postgresql}"
+readonly CONF_FILE="${DATA_DIR}/postgresql.conf"
+readonly HBA_FILE="${DATA_DIR}/pg_hba.conf"
+readonly IDENT_FILE="${DATA_DIR}/pg_ident.conf"
+
+mkdir -p "${DATA_DIR}" "${RUNTIME_DIR}"
+
+ssl_enabled="$(bashio::config 'ssl.enabled')"
+ssl_setting="off"
+ssl_cert_file=""
+ssl_key_file=""
+
+if bashio::var.true "${ssl_enabled}"; then
+  ssl_cert_file="$(bashio::config 'ssl.certfile')"
+  ssl_key_file="$(bashio::config 'ssl.keyfile')"
+
+  if [[ -z "${ssl_cert_file}" || -z "${ssl_key_file}" ]]; then
+    bashio::exit.nok "ssl.enabled requires ssl.certfile and ssl.keyfile"
+  fi
+
+  test -r "${ssl_cert_file}" || bashio::exit.nok "ssl.certfile must be readable"
+  test -r "${ssl_key_file}" || bashio::exit.nok "ssl.keyfile must be readable"
+
+  key_mode="$(stat -c '%a' "${ssl_key_file}")"
+  case "${key_mode}" in
+    400|600)
+      ;;
+    *)
+      bashio::exit.nok "ssl.keyfile must have restrictive permissions"
+      ;;
+  esac
+
+  ssl_setting="on"
+fi
+
+allowlist=()
+allowlist_count="$(bashio::config 'network.allowlist|length')"
+if [[ "${allowlist_count}" -gt 0 ]]; then
+  for idx in $(bashio::config 'network.allowlist|keys'); do
+    cidr="$(bashio::config "network.allowlist[${idx}]")"
+    [[ -n "${cidr}" ]] && allowlist+=("${cidr}")
+  done
+else
+  allowlist+=("127.0.0.1/32" "::1/128")
+fi
+
+{
+  printf "listen_addresses = '*'\n"
+  printf "unix_socket_directories = '%s'\n" "${RUNTIME_DIR}"
+  printf "data_directory = '%s'\n" "${DATA_DIR}"
+  printf "hba_file = '%s'\n" "${HBA_FILE}"
+  printf "ident_file = '%s'\n" "${IDENT_FILE}"
+  printf "ssl = %s\n" "${ssl_setting}"
+  if bashio::var.true "${ssl_enabled}"; then
+    printf "ssl_cert_file = '%s'\n" "${ssl_cert_file}"
+    printf "ssl_key_file = '%s'\n" "${ssl_key_file}"
+  fi
+  printf "shared_preload_libraries = 'timescaledb'\n"
+} > "${CONF_FILE}"
+
+{
+  printf "local all all trust\n"
+  for cidr in "${allowlist[@]}"; do
+    if bashio::var.true "${ssl_enabled}"; then
+      printf "hostssl all all %s scram-sha-256\n" "${cidr}"
+    else
+      printf "host all all %s scram-sha-256\n" "${cidr}"
+    fi
+  done
+} > "${HBA_FILE}"
+
+: > "${IDENT_FILE}"
