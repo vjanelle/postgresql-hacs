@@ -13,11 +13,10 @@ ORDER BY 1, 2, 3;
 SELECT
   'database' AS object_type,
   d.datname AS object_context,
-  r.rolname AS subject_role,
+  COALESCE(pg_get_userbyid(p.grantee), 'PUBLIC') AS subject_role,
   p.privilege_type AS extra_privilege
 FROM pg_database d
 JOIN LATERAL aclexplode(COALESCE(d.datacl, acldefault('d', d.datdba))) AS p ON true
-JOIN pg_roles r ON r.oid = p.grantee
 WHERE p.privilege_type IS NOT NULL
 ORDER BY 1, 2, 3, 4;
 
@@ -25,10 +24,9 @@ ORDER BY 1, 2, 3, 4;
 SELECT
   'schema' AS object_type,
   n.nspname AS object_context,
-  r.rolname AS subject_role,
+  COALESCE(pg_get_userbyid(p.grantee), 'PUBLIC') AS subject_role,
   p.privilege_type AS extra_privilege
 FROM pg_namespace n
 JOIN LATERAL aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) AS p ON true
-JOIN pg_roles r ON r.oid = p.grantee
 WHERE p.privilege_type IS NOT NULL
 ORDER BY 1, 2, 3, 4;
