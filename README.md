@@ -34,3 +34,5 @@ network:
     - 127.0.0.1/32
     - 192.168.1.0/24
 ```
+
+When `ssl.enabled` is `true`, also provide `ssl.certfile` and `ssl.keyfile`. `ssl.certfile` must be readable by the PostgreSQL runtime user. `ssl.keyfile` must be owned by the PostgreSQL runtime user and use mode `400` or `600`.
