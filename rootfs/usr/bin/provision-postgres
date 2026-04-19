@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+source /usr/lib/bashio/bashio
+
+readonly BOOTSTRAP_DIR="/usr/share/postgresql/bootstrap"
+readonly ADMIN_DB="postgres"
+readonly PSQL_APPLY_FILE="/usr/bin/psql-apply-file"
+
+sql_literal() {
+  local value="${1//\'/\'\'}"
+  printf "'%s'" "${value}"
+}
+
+join_privileges() {
+  local raw="$1"
+  local -a items=()
+  local item
+  read -r -a items <<< "${raw}"
+
+  local joined=""
+  for item in "${items[@]}"; do
+    [[ -z "${item}" ]] && continue
+    if [[ -n "${joined}" ]]; then
+      joined+=", "
+    fi
+    joined+="${item}"
+  done
+
+  printf "%s" "${joined}"
+}
+
+psql_exec() {
+  local db_name="$1"
+  local sql="$2"
+
+  runuser -u postgres -- psql \
+    --no-psqlrc \
+    --quiet \
+    --set=ON_ERROR_STOP=1 \
+    --host /run/postgresql \
+    --username postgres \
+    --dbname "${db_name}" \
+    --command "${sql}"
+}
+
+psql_scalar() {
+  local db_name="$1"
+  local sql="$2"
+
+  runuser -u postgres -- psql \
+    --no-psqlrc \
+    --quiet \
+    --tuples-only \
+    --no-align \
+    --set=ON_ERROR_STOP=1 \
+    --host /run/postgresql \
+    --username postgres \
+    --dbname "${db_name}" \
+    --command "${sql}"
+}
+
+db_owner() {
+  local db_name="$1"
+  psql_scalar "${ADMIN_DB}" "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = ${db_name};"
+}
+
+apply_file() {
+  local database="$1"
+  local file="$2"
+  shift 2
+  "${PSQL_APPLY_FILE}" "${database}" "${file}" "$@"
+}
+
+if [[ "$(bashio::config 'roles|length')" -gt 0 ]]; then
+  for role in $(bashio::config 'roles|keys'); do
+    username="$(bashio::config "roles[${role}].username")"
+    login="false"
+    password=""
+
+    if bashio::config.exists "roles[${role}].login"; then
+      login="$(bashio::config "roles[${role}].login")"
+    fi
+    if bashio::config.exists "roles[${role}].password"; then
+      password="$(bashio::config "roles[${role}].password")"
+    fi
+
+    apply_file "${ADMIN_DB}" "${BOOTSTRAP_DIR}/roles.sql" \
+      -v role_name="${username}" \
+      -v role_login="${login}" \
+      -v role_password="${password}"
+  done
+fi
+
+if [[ "$(bashio::config 'memberships|length')" -gt 0 ]]; then
+  for membership in $(bashio::config 'memberships|keys'); do
+    group_name="$(bashio::config "memberships[${membership}].group")"
+    member_name="$(bashio::config "memberships[${membership}].member")"
+
+    apply_file "${ADMIN_DB}" "${BOOTSTRAP_DIR}/memberships.sql" \
+      -v group_name="${group_name}" \
+      -v member_name="${member_name}"
+  done
+fi
+
+if [[ "$(bashio::config 'databases|length')" -gt 0 ]]; then
+  for database in $(bashio::config 'databases|keys'); do
+    db_name="$(bashio::config "databases[${database}].name")"
+    db_owner_name=""
+
+    if bashio::config.exists "databases[${database}].owner"; then
+      db_owner_name="$(bashio::config "databases[${database}].owner")"
+    fi
+
+    apply_file "${ADMIN_DB}" "${BOOTSTRAP_DIR}/databases.sql" \
+      -v db_name="${db_name}" \
+      -v db_owner="${db_owner_name}"
+  done
+fi
+
+if [[ "$(bashio::config 'databases|length')" -gt 0 ]]; then
+  for database in $(bashio::config 'databases|keys'); do
+    db_name="$(bashio::config "databases[${database}].name")"
+    apply_file "${db_name}" "${BOOTSTRAP_DIR}/extensions.sql"
+  done
+fi
+
+if [[ "$(bashio::config 'databases|length')" -gt 0 ]]; then
+  for database in $(bashio::config 'databases|keys'); do
+    db_name="$(bashio::config "databases[${database}].name")"
+    current_owner="$(db_owner "$(sql_literal "${db_name}")")"
+    current_owner="${current_owner//$'\n'/}"
+    apply_file "${db_name}" "${BOOTSTRAP_DIR}/schemas.sql" \
+      -v db_owner="${current_owner}"
+  done
+fi
+
+if [[ "$(bashio::config 'grants|length')" -gt 0 ]]; then
+  for grant in $(bashio::config 'grants|keys'); do
+    grant_db="$(bashio::config "grants[${grant}].database")"
+    grant_role="$(bashio::config "grants[${grant}].role")"
+    grant_privileges_raw="$(bashio::config "grants[${grant}].privileges")"
+    grant_privileges="$(join_privileges "${grant_privileges_raw}")"
+    grant_db_owner="$(db_owner "$(sql_literal "${grant_db}")")"
+    grant_db_owner="${grant_db_owner//$'\n'/}"
+
+    psql_exec "${grant_db}" "$(cat <<EOF
+ALTER DEFAULT PRIVILEGES FOR ROLE $(sql_literal "${grant_db_owner}") IN SCHEMA public GRANT ${grant_privileges} ON TABLES TO $(sql_literal "${grant_role}");
+EOF
+)"
+
+    apply_file "${grant_db}" "${BOOTSTRAP_DIR}/grants.sql" \
+      -v grant_role="${grant_role}" \
+      -v grant_privileges="${grant_privileges}"
+  done
+fi

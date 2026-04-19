@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly SOCKET_DIR="/run/postgresql"
+
+if [[ $# -lt 2 ]]; then
+  printf 'usage: %s <database> <sql-file> [psql-args...]\n' "$0" >&2
+  exit 1
+fi
+
+database="$1"
+sql_file="$2"
+shift 2
+
+runuser -u postgres -- psql \
+  --no-psqlrc \
+  --quiet \
+  --set=ON_ERROR_STOP=1 \
+  --host "${SOCKET_DIR}" \
+  --username postgres \
+  --dbname "${database}" \
+  --file "${sql_file}" \
+  "$@"
