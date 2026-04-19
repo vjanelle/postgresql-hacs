@@ -9,5 +9,4 @@ exec runuser -u postgres -- /usr/lib/postgresql/18/bin/postgres \
   -c config_file="${DATA_DIR}/postgresql.conf" \
   -c hba_file="${DATA_DIR}/pg_hba.conf" \
   -c ident_file="${DATA_DIR}/pg_ident.conf" \
-  -c unix_socket_directories="${RUNTIME_DIR}" \
-  -c shared_preload_libraries='timescaledb'
+  -c unix_socket_directories="${RUNTIME_DIR}"
