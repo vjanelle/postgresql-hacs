@@ -27,7 +27,15 @@ if bashio::var.true "${ssl_enabled}"; then
   test -r "${ssl_cert_file}" || bashio::exit.nok "ssl.certfile must be readable"
   test -r "${ssl_key_file}" || bashio::exit.nok "ssl.keyfile must be readable"
 
+  cert_mode="$(stat -c '%a' "${ssl_cert_file}")"
   key_mode="$(stat -c '%a' "${ssl_key_file}")"
+  case "${cert_mode}" in
+    400|440|444|600|640|644)
+      ;;
+    *)
+      bashio::exit.nok "ssl.certfile must have readable permissions"
+      ;;
+  esac
   case "${key_mode}" in
     400|600)
       ;;

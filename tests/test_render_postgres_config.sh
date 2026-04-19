@@ -137,3 +137,18 @@ grep -q "^ssl_cert_file = '${cert_file}'$" "${ssl_on_dir}/postgresql.conf"
 grep -q "^ssl_key_file = '${key_file}'$" "${ssl_on_dir}/postgresql.conf"
 grep -q "^hostssl all all 10.0.0.0/24 scram-sha-256$" "${ssl_on_dir}/pg_hba.conf"
 grep -q "^hostssl all all 192.168.1.0/24 scram-sha-256$" "${ssl_on_dir}/pg_hba.conf"
+
+bad_cert_dir="${tmpdir}/bad-cert"
+mkdir -p "${bad_cert_dir}"
+bad_cert_file="${tmpdir}/bad-server.crt"
+: > "${bad_cert_file}"
+chmod 666 "${bad_cert_file}"
+
+if render "${bad_cert_dir}" \
+  BASHIO_SSL_ENABLED=true \
+  BASHIO_SSL_CERTFILE="${bad_cert_file}" \
+  BASHIO_SSL_KEYFILE="${key_file}" \
+  BASHIO_HOST_NETWORK=true \
+  BASHIO_ALLOWLIST=$'10.0.0.0/24'; then
+  exit 1
+fi
