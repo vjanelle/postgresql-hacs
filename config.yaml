@@ -2,6 +2,13 @@
 version: 18.0.0
 slug: postgresql18
 name: PostgreSQL 18
+description: PostgreSQL 18 database app for Home Assistant.
+arch:
+  - aarch64
+  - amd64
+  - armv7
+  - armhf
+  - i386
 startup: services
 image: ghcr.io/home-assistant/{arch}-addon-postgresql18
 ports:

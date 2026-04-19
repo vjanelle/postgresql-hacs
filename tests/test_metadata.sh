@@ -10,6 +10,13 @@ test -f DOCS.md
 grep -q "^version: 18.0.0$" config.yaml
 grep -q "^slug: postgresql18$" config.yaml
 grep -q "^name: PostgreSQL 18$" config.yaml
+grep -q "^description: PostgreSQL 18 database app for Home Assistant\\.$" config.yaml
+grep -q "^arch:$" config.yaml
+grep -q "^  - aarch64$" config.yaml
+grep -q "^  - amd64$" config.yaml
+grep -q "^  - armv7$" config.yaml
+grep -q "^  - armhf$" config.yaml
+grep -q "^  - i386$" config.yaml
 grep -q "^startup: services$" config.yaml
 grep -q "^image: ghcr.io/home-assistant/{arch}-addon-postgresql18$" config.yaml
 grep -q "^ports:$" config.yaml
