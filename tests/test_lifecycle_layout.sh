@@ -20,5 +20,12 @@ for path in \
   rootfs/etc/s6-overlay/s6-rc.d/user/contents.d/postgres \
   rootfs/usr/local/bin/provisioning-entrypoint
 do
-  test -f "$path"
+  case "$path" in
+    */run|*/provisioning-entrypoint)
+      test -x "$path"
+      ;;
+    *)
+      test -f "$path"
+      ;;
+  esac
 done

@@ -64,6 +64,11 @@ psql_scalar() {
     --command "${sql}"
 }
 
+db_owner() {
+  local db_name="$1"
+  psql_scalar "${ADMIN_DB}" "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = ${db_name};"
+}
+
 if [[ "$(bashio::config 'roles|length')" -gt 0 ]]; then
   for role in $(bashio::config 'roles|keys'); do
     username="$(bashio::config "roles[${role}].username")"
@@ -143,6 +148,11 @@ if [[ "$(bashio::config 'databases|length')" -gt 0 ]]; then
         psql_exec "${ADMIN_DB}" "CREATE DATABASE ${db_ident} OWNER $(sql_ident "${db_owner}");"
       else
         psql_exec "${ADMIN_DB}" "CREATE DATABASE ${db_ident};"
+      fi
+    elif [[ -n "${db_owner}" ]]; then
+      current_owner="$(db_owner "${db_literal}")"
+      if [[ "${current_owner}" != "${db_owner}" ]]; then
+        psql_exec "${ADMIN_DB}" "ALTER DATABASE ${db_ident} OWNER TO $(sql_ident "${db_owner}");"
       fi
     fi
   done

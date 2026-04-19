@@ -4,10 +4,21 @@ set -euo pipefail
 source /usr/lib/bashio/bashio
 
 readonly RUNTIME_DIR="/run/postgresql"
+readonly READY_TIMEOUT_SECONDS=60
 
-until pg_isready -h "${RUNTIME_DIR}" -p 5432 -U postgres >/dev/null 2>&1; do
+ready=0
+for ((attempt=1; attempt<=READY_TIMEOUT_SECONDS; attempt++)); do
+  if pg_isready -h "${RUNTIME_DIR}" -p 5432 -U postgres >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
   sleep 1
 done
+
+if [[ "${ready}" -ne 1 ]]; then
+  bashio::log.fatal "PostgreSQL did not become ready within ${READY_TIMEOUT_SECONDS} seconds"
+  exit 1
+fi
 
 /usr/local/bin/provisioning-entrypoint
 
