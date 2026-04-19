@@ -159,7 +159,7 @@ if [[ "$(bashio::config 'grants|length')" -gt 0 ]]; then
     grant_db_owner="${grant_db_owner//$'\n'/}"
 
     psql_exec "${grant_db}" "$(cat <<EOF
-ALTER DEFAULT PRIVILEGES FOR ROLE $(sql_literal "${grant_db_owner}") IN SCHEMA public GRANT ${grant_privileges} ON TABLES TO $(sql_literal "${grant_role}");
+ALTER DEFAULT PRIVILEGES FOR ROLE $(sql_ident "${grant_db_owner}") IN SCHEMA public GRANT ${grant_privileges} ON TABLES TO $(sql_literal "${grant_role}");
 EOF
 )"
 
