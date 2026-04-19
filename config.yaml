@@ -1,0 +1,42 @@
+---
+version: 18.0.0
+slug: postgresql18
+name: PostgreSQL 18
+startup: services
+image: ghcr.io/home-assistant/{arch}-addon-postgresql18
+ports:
+  5432/tcp: null
+map:
+  - addon_config:rw
+options:
+  roles: []
+  databases: []
+  memberships: []
+  grants: []
+  ssl:
+    enabled: false
+  network:
+    host_network: false
+schema:
+  roles:
+    - login: bool?
+      password: password?
+      username: str
+  databases:
+    - owner: str?
+      username: str?
+      name: str
+  memberships:
+    - group: str
+      member: str
+  grants:
+    - database: str
+      privileges:
+        - str
+      role: str
+  ssl:
+    enabled: bool?
+    certfile: str?
+    keyfile: str?
+  network:
+    host_network: bool?

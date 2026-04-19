@@ -1,0 +1,28 @@
+# Home Assistant App: PostgreSQL 18
+
+PostgreSQL 18 app for app-backed databases.
+
+## Configuration
+
+Example app configuration:
+
+```yaml
+roles:
+  - username: app_login
+    password: PASSWORD
+    login: true
+  - username: app_role
+    login: false
+databases:
+  - name: appdb
+    owner: app_login
+schemas:
+  - database: appdb
+    name: app_schema
+    owner: app_role
+admins:
+  - username: app_login
+extensions:
+  - database: appdb
+    name: pg_trgm
+```
