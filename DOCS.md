@@ -25,13 +25,8 @@ grants:
     privileges:
       - SELECT
       - INSERT
-schemas:
-  - database: appdb
-    name: app_schema
-    owner: app_role
-admins:
-  - username: app_login
-extensions:
-  - database: appdb
-    name: pg_trgm
+ssl:
+  enabled: false
+network:
+  host_network: false
 ```
