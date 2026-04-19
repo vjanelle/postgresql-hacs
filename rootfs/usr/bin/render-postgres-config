@@ -11,6 +11,32 @@ readonly IDENT_FILE="${DATA_DIR}/pg_ident.conf"
 
 mkdir -p "${DATA_DIR}" "${RUNTIME_DIR}"
 
+runtime_uid="${POSTGRES_RUNTIME_UID:-}"
+runtime_gid="${POSTGRES_RUNTIME_GID:-}"
+if [[ -z "${runtime_uid}" || -z "${runtime_gid}" ]]; then
+  runtime_uid="$(id -u postgres)"
+  runtime_gid="$(id -g postgres)"
+fi
+
+can_runtime_user_read() {
+  local path="$1"
+  local file_uid file_gid file_mode
+
+  read -r file_uid file_gid file_mode < <(stat -c '%u %g %a' "${path}")
+
+  if [[ "${runtime_uid}" == "${file_uid}" ]]; then
+    (( 8#${file_mode} & 0400 )) && return 0
+  fi
+
+  if [[ "${runtime_gid}" == "${file_gid}" ]]; then
+    (( 8#${file_mode} & 0040 )) && return 0
+  fi
+
+  (( 8#${file_mode} & 0004 )) && return 0
+
+  return 1
+}
+
 ssl_enabled="$(bashio::config 'ssl.enabled')"
 ssl_setting="off"
 ssl_cert_file=""
@@ -24,20 +50,12 @@ if bashio::var.true "${ssl_enabled}"; then
     bashio::exit.nok "ssl.enabled requires ssl.certfile and ssl.keyfile"
   fi
 
-  test -r "${ssl_cert_file}" || bashio::exit.nok "ssl.certfile must be readable"
-  test -r "${ssl_key_file}" || bashio::exit.nok "ssl.keyfile must be readable"
+  can_runtime_user_read "${ssl_cert_file}" || bashio::exit.nok "ssl.certfile must be readable by the postgres runtime user"
+  can_runtime_user_read "${ssl_key_file}" || bashio::exit.nok "ssl.keyfile must be readable by the postgres runtime user"
 
-  cert_mode="$(stat -c '%a' "${ssl_cert_file}")"
   key_mode="$(stat -c '%a' "${ssl_key_file}")"
-  case "${cert_mode}" in
-    400|440|444|600|640|644)
-      ;;
-    *)
-      bashio::exit.nok "ssl.certfile must have readable permissions"
-      ;;
-  esac
   case "${key_mode}" in
-    400|600)
+    400|440|600|640)
       ;;
     *)
       bashio::exit.nok "ssl.keyfile must have restrictive permissions"

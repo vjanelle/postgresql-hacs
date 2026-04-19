@@ -30,5 +30,7 @@ grants:
 ssl:
   enabled: false
 network:
-  host_network: false
+  allowlist:
+    - 127.0.0.1/32
+    - 192.168.1.0/24
 ```

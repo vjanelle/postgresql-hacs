@@ -35,7 +35,7 @@ bashio::var.true() {
 
 bashio::config.exists() {
   case "$1" in
-    ssl.certfile|ssl.keyfile|network.allowlist|network.host_network)
+    ssl.certfile|ssl.keyfile|network.allowlist)
       [[ -n "${BASHIO_CONFIG_EXISTS:-1}" ]]
       ;;
     *)
@@ -53,8 +53,6 @@ bashio::config() {
     printf '%s\n' "${BASHIO_SSL_CERTFILE:-}"
   elif [[ "${key}" == "ssl.keyfile" ]]; then
     printf '%s\n' "${BASHIO_SSL_KEYFILE:-}"
-  elif [[ "${key}" == "network.host_network" ]]; then
-    printf '%s\n' "${BASHIO_HOST_NETWORK:-false}"
   elif [[ "${key}" == "network.allowlist|length" ]]; then
     if [[ -z "${BASHIO_ALLOWLIST:-}" ]]; then
       printf '0\n'
@@ -93,11 +91,15 @@ render() {
     bash rootfs/usr/bin/render-postgres-config
 }
 
+runtime_uid=12345
+runtime_gid="$(id -g)"
+
 ssl_off_dir="${tmpdir}/ssl-off"
 mkdir -p "${ssl_off_dir}"
 render "${ssl_off_dir}" \
   BASHIO_SSL_ENABLED=false \
-  BASHIO_HOST_NETWORK=false \
+  POSTGRES_RUNTIME_UID="${runtime_uid}" \
+  POSTGRES_RUNTIME_GID="${runtime_gid}" \
   BASHIO_ALLOWLIST=$'10.0.0.0/24\n192.168.1.0/24'
 
 grep -q "^listen_addresses = " "${ssl_off_dir}/postgresql.conf"
@@ -120,8 +122,8 @@ cert_file="${tmpdir}/server.crt"
 key_file="${tmpdir}/server.key"
 : > "${cert_file}"
 : > "${key_file}"
-chmod 644 "${cert_file}"
-chmod 600 "${key_file}"
+chmod 640 "${cert_file}"
+chmod 640 "${key_file}"
 
 ssl_on_dir="${tmpdir}/ssl-on"
 mkdir -p "${ssl_on_dir}"
@@ -129,7 +131,8 @@ render "${ssl_on_dir}" \
   BASHIO_SSL_ENABLED=true \
   BASHIO_SSL_CERTFILE="${cert_file}" \
   BASHIO_SSL_KEYFILE="${key_file}" \
-  BASHIO_HOST_NETWORK=true \
+  POSTGRES_RUNTIME_UID="${runtime_uid}" \
+  POSTGRES_RUNTIME_GID="${runtime_gid}" \
   BASHIO_ALLOWLIST=$'10.0.0.0/24\n192.168.1.0/24'
 
 grep -q "^ssl = on$" "${ssl_on_dir}/postgresql.conf"
@@ -142,13 +145,14 @@ bad_cert_dir="${tmpdir}/bad-cert"
 mkdir -p "${bad_cert_dir}"
 bad_cert_file="${tmpdir}/bad-server.crt"
 : > "${bad_cert_file}"
-chmod 666 "${bad_cert_file}"
+chmod 600 "${bad_cert_file}"
 
 if render "${bad_cert_dir}" \
   BASHIO_SSL_ENABLED=true \
   BASHIO_SSL_CERTFILE="${bad_cert_file}" \
   BASHIO_SSL_KEYFILE="${key_file}" \
-  BASHIO_HOST_NETWORK=true \
+  POSTGRES_RUNTIME_UID="${runtime_uid}" \
+  POSTGRES_RUNTIME_GID="${runtime_gid}" \
   BASHIO_ALLOWLIST=$'10.0.0.0/24'; then
   exit 1
 fi

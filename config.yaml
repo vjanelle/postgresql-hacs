@@ -23,7 +23,6 @@ options:
   ssl:
     enabled: false
   network:
-    host_network: false
     allowlist: []
 schema:
   roles:
@@ -47,6 +46,5 @@ schema:
     certfile: str?
     keyfile: str?
   network:
-    host_network: bool?
     allowlist:
       - str?
