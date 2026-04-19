@@ -65,6 +65,25 @@ psql_scalar() {
     --command "${sql}"
 }
 
+psql_query_file() {
+  local db_name="$1"
+  local sql_file="$2"
+  shift 2
+
+  runuser -u postgres -- psql \
+    --no-psqlrc \
+    --quiet \
+    --tuples-only \
+    --no-align \
+    --field-separator=$'\t' \
+    --set=ON_ERROR_STOP=1 \
+    --host /run/postgresql \
+    --username postgres \
+    --dbname "${db_name}" \
+    --file "${sql_file}" \
+    "$@"
+}
+
 db_owner() {
   local db_name="$1"
   psql_scalar "${ADMIN_DB}" "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = ${db_name};"
@@ -76,6 +95,10 @@ apply_file() {
   shift 2
   "${PSQL_APPLY_FILE}" "${database}" "${file}" "$@"
 }
+
+declare -A declared_memberships=()
+declare -A declared_database_privileges=()
+declare -A declared_schema_privileges=()
 
 if [[ "$(bashio::config 'roles|length')" -gt 0 ]]; then
   for role in $(bashio::config 'roles|keys'); do
@@ -101,6 +124,7 @@ if [[ "$(bashio::config 'memberships|length')" -gt 0 ]]; then
   for membership in $(bashio::config 'memberships|keys'); do
     group_name="$(bashio::config "memberships[${membership}].group")"
     member_name="$(bashio::config "memberships[${membership}].member")"
+    declared_memberships["${group_name}"$'\t'"${member_name}"]=1
 
     apply_file "${ADMIN_DB}" "${BOOTSTRAP_DIR}/memberships.sql" \
       -v group_name="${group_name}" \
@@ -157,6 +181,8 @@ if [[ "$(bashio::config 'grants|length')" -gt 0 ]]; then
     grant_privileges="$(join_privileges "${grant_privileges_raw}")"
     grant_db_owner="$(db_owner "$(sql_literal "${grant_db}")")"
     grant_db_owner="${grant_db_owner//$'\n'/}"
+    declared_database_privileges["${grant_db}"$'\t'"${grant_role}"$'\t'CONNECT]=1
+    declared_schema_privileges["public"$'\t'"${grant_role}"$'\t'USAGE]=1
 
     psql_exec "${grant_db}" "$(cat <<EOF
 ALTER DEFAULT PRIVILEGES FOR ROLE $(sql_ident "${grant_db_owner}") IN SCHEMA public GRANT ${grant_privileges} ON TABLES TO $(sql_ident "${grant_role}");
@@ -167,4 +193,31 @@ EOF
       -v grant_role="${grant_role}" \
       -v grant_privileges="${grant_privileges}"
   done
+fi
+
+if [[ "$(bashio::config 'memberships|length')" -gt 0 || "$(bashio::config 'grants|length')" -gt 0 ]]; then
+  while IFS=$'\t' read -r object_type object_context subject_role extra_privilege; do
+    [[ -z "${object_type:-}" ]] && continue
+
+    case "${object_type}" in
+      membership)
+        key="${object_context}"$'\t'"${subject_role}"
+        if [[ -z "${declared_memberships[${key}]:-}" ]]; then
+          bashio::log.warning "postgres drift: object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
+        fi
+        ;;
+      database)
+        key="${object_context}"$'\t'"${subject_role}"$'\t'"${extra_privilege}"
+        if [[ -z "${declared_database_privileges[${key}]:-}" ]]; then
+          bashio::log.warning "postgres drift: object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
+        fi
+        ;;
+      schema)
+        key="${object_context}"$'\t'"${subject_role}"$'\t'"${extra_privilege}"
+        if [[ -z "${declared_schema_privileges[${key}]:-}" ]]; then
+          bashio::log.warning "postgres drift: object_type=${object_type} context=${object_context} subject_role=${subject_role} extra_privilege=${extra_privilege}"
+        fi
+        ;;
+    esac
+  done < <(psql_query_file "${ADMIN_DB}" "${BOOTSTRAP_DIR}/drift.sql")
 fi

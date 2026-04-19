@@ -9,7 +9,8 @@ for path in \
   postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/databases.sql \
   postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/extensions.sql \
   postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/schemas.sql \
-  postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/grants.sql
+  postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/grants.sql \
+  postgresql18-addon/rootfs/usr/share/postgresql/bootstrap/drift.sql
 do
   test -f "$path"
 done
