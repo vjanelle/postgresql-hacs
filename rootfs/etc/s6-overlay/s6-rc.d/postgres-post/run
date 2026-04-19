@@ -13,4 +13,12 @@ if [[ -x /usr/local/bin/provisioning-entrypoint ]]; then
   /usr/local/bin/provisioning-entrypoint
 fi
 
+bashio::log.info "Publishing PostgreSQL service information"
+PAYLOAD=$(
+  bashio::var.json \
+    host "$(hostname)" \
+    port "^5432"
+)
+bashio::services.publish "postgresql" "${PAYLOAD}"
+
 bashio::log.info "PostgreSQL 18 ready"
