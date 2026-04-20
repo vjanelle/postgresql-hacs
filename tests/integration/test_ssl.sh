@@ -10,9 +10,12 @@ container="$(integration::container_name ssl)"
 
 cleanup() {
   integration::cleanup_container "${container}"
+  integration::cleanup_all_test_containers
   rm -rf "${tmpdir}"
 }
 trap cleanup EXIT
+
+integration::cleanup_all_test_containers
 
 write_common_options() {
   local options_file="$1"

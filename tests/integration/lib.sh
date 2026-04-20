@@ -67,12 +67,10 @@ integration::build_image() {
   local container_bin
   container_bin="$(integration::container_bin)"
 
-  if ! "${container_bin}" image inspect "${image_tag}" >/dev/null 2>&1; then
-    "${container_bin}" build \
-      --build-arg BUILD_FROM="$(integration::build_from)" \
-      -t "${image_tag}" \
-      "$(integration::repo_root)"
-  fi
+  "${container_bin}" build \
+    --build-arg BUILD_FROM="$(integration::build_from)" \
+    -t "${image_tag}" \
+    "$(integration::repo_root)"
 }
 
 integration::container_name() {
@@ -85,6 +83,19 @@ integration::cleanup_container() {
   container_bin="$(integration::container_bin)"
 
   "${container_bin}" rm -f "${container}" >/dev/null 2>&1 || true
+}
+
+integration::cleanup_all_test_containers() {
+  local container_bin
+  container_bin="$(integration::container_bin)"
+
+  while IFS= read -r container; do
+    [[ -z "${container}" ]] && continue
+    "${container_bin}" rm -f "${container}" >/dev/null 2>&1 || true
+  done < <(
+    "${container_bin}" ps -a --format '{{.Names}}' 2>/dev/null \
+      | grep '^postgresql18-addon-it-' || true
+  )
 }
 
 integration::start_container() {

@@ -1,20 +1,13 @@
----
-version: 18.0.0
 slug: postgresql18
 name: PostgreSQL 18
-description: PostgreSQL 18 database app for Home Assistant.
-arch:
-  - aarch64
-  - amd64
-  - armv7
-  - armhf
-  - i386
-startup: services
-image: ghcr.io/home-assistant/{arch}-addon-postgresql18
+version: "1.0.0"
+startup: auto
+image: "ghcr.io/example/postgresql18:latest"
 ports:
-  5432/tcp: null
+  - "5432/tcp"
 map:
-  - addon_config:rw
+  "/data": "/var/lib/postgresql/data"
+  "/ssl": "/etc/postgresql/ssl"
 options:
   roles: []
   databases: []
@@ -23,28 +16,5 @@ options:
   ssl:
     enabled: false
   network:
-    allowlist: []
-schema:
-  roles:
-    - login: bool?
-      password: password?
-      username: str
-  databases:
-    - owner: str?
-      username: str?
-      name: str
-  memberships:
-    - group: str
-      member: str
-  grants:
-    - database: str
-      privileges:
-        - str
-      role: str
-  ssl:
-    enabled: bool?
-    certfile: str?
-    keyfile: str?
-  network:
-    allowlist:
-      - str?
+    allowed_cidrs: []
+schema: {}
