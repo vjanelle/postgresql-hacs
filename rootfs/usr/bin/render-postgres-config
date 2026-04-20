@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${BASHIO_LIB:-/usr/lib/bashio/bashio}"
+source "${BASHIO_LIB:-/usr/lib/bashio/bashio.sh}"
 
 readonly DATA_DIR="${POSTGRES_DATA_DIR:-/data/postgres}"
 readonly RUNTIME_DIR="${POSTGRES_RUNTIME_DIR:-/run/postgresql}"
 readonly CONF_FILE="${DATA_DIR}/postgresql.conf"
 readonly HBA_FILE="${DATA_DIR}/pg_hba.conf"
 readonly IDENT_FILE="${DATA_DIR}/pg_ident.conf"
+
+prime_addon_config_cache() {
+  if ! declare -F bashio::cache.set >/dev/null 2>&1; then
+    return
+  fi
+
+  if [[ -f /data/options.json ]]; then
+    bashio::cache.set "addons.self.options.config" "$(< /data/options.json)"
+  fi
+}
+
+prime_addon_config_cache
 
 mkdir -p "${DATA_DIR}" "${RUNTIME_DIR}"
 

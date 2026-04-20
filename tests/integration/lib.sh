@@ -87,11 +87,12 @@ integration::cleanup_container() {
 
 integration::cleanup_all_test_containers() {
   local container_bin
+  local test_container
   container_bin="$(integration::container_bin)"
 
-  while IFS= read -r container; do
-    [[ -z "${container}" ]] && continue
-    "${container_bin}" rm -f "${container}" >/dev/null 2>&1 || true
+  while IFS= read -r test_container; do
+    [[ -z "${test_container}" ]] && continue
+    "${container_bin}" rm -f "${test_container}" >/dev/null 2>&1 || true
   done < <(
     "${container_bin}" ps -a --format '{{.Names}}' 2>/dev/null \
       | grep '^postgresql18-addon-it-' || true
@@ -178,4 +179,20 @@ integration::prepare_ssl_dir() {
     --entrypoint bash \
     "$(integration::image_tag)" \
     -lc "chown postgres:postgres '${ssl_dir}/server.crt' '${ssl_dir}/server.key' && chmod 640 '${ssl_dir}/server.crt' && chmod 600 '${ssl_dir}/server.key'"
+}
+
+integration::cleanup_tmpdir() {
+  local tmpdir="$1"
+  local container_bin
+  container_bin="$(integration::container_bin)"
+
+  [[ -d "${tmpdir}" ]] || return 0
+
+  "${container_bin}" run --rm \
+    -v "${tmpdir}:${tmpdir}" \
+    --entrypoint bash \
+    "$(integration::image_tag)" \
+    -lc "rm -rf '${tmpdir}'" >/dev/null 2>&1 || true
+
+  rm -rf "${tmpdir}" >/dev/null 2>&1 || true
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source /usr/lib/bashio/bashio
+source "${BASHIO_LIB:-/usr/lib/bashio/bashio.sh}"
 
 readonly RUNTIME_DIR="/run/postgresql"
 readonly READY_TIMEOUT_SECONDS=60
@@ -28,6 +28,8 @@ PAYLOAD=$(
     host "$(hostname)" \
     port "^5432"
 )
-bashio::services.publish "postgresql" "${PAYLOAD}"
+if ! bashio::services.publish "postgresql" "${PAYLOAD}"; then
+  bashio::log.warning "Failed to publish PostgreSQL service information"
+fi
 
 bashio::log.info "PostgreSQL 18 ready"

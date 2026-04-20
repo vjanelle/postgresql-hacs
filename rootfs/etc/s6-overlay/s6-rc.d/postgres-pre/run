@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source /usr/lib/bashio/bashio
+source "${BASHIO_LIB:-/usr/lib/bashio/bashio.sh}"
 
 readonly DATA_DIR="/data/postgres"
 readonly RUNTIME_DIR="/run/postgresql"
@@ -12,7 +12,7 @@ chown -R postgres:postgres "${DATA_DIR}" "${RUNTIME_DIR}" "${LOG_DIR}"
 
 if [[ ! -f "${DATA_DIR}/PG_VERSION" ]]; then
   bashio::log.info "Initializing PostgreSQL 18 cluster"
-  runuser -u postgres -- initdb \
+  runuser -u postgres -- /usr/lib/postgresql/18/bin/initdb \
     -D "${DATA_DIR}" \
     --username=postgres \
     --encoding=UTF8 \

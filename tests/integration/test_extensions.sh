@@ -11,7 +11,7 @@ container="$(integration::container_name extensions)"
 cleanup() {
   integration::cleanup_container "${container}"
   integration::cleanup_all_test_containers
-  rm -rf "${tmpdir}"
+  integration::cleanup_tmpdir "${tmpdir}"
 }
 trap cleanup EXIT
 

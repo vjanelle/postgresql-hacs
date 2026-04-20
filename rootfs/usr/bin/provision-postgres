@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-source "${BASHIO_LIB:-/usr/lib/bashio/bashio}"
+source "${BASHIO_LIB:-/usr/lib/bashio/bashio.sh}"
 
 readonly BOOTSTRAP_DIR="/usr/share/postgresql/bootstrap"
 readonly ADMIN_DB="postgres"
 readonly PSQL_APPLY_FILE="${PSQL_APPLY_FILE:-/usr/bin/psql-apply-file}"
 readonly PSQL_BIN="${PSQL_BIN:-psql}"
 readonly RUNUSER_BIN="${RUNUSER_BIN:-runuser}"
+
+prime_addon_config_cache() {
+  if ! declare -F bashio::cache.set >/dev/null 2>&1; then
+    return
+  fi
+
+  if [[ -f /data/options.json ]]; then
+    bashio::cache.set "addons.self.options.config" "$(< /data/options.json)"
+  fi
+}
+
+prime_addon_config_cache
 
 sql_literal() {
   local value="${1//\'/\'\'}"
