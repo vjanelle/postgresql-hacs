@@ -16,5 +16,66 @@ options:
   ssl:
     enabled: false
   network:
-    allowed_cidrs: []
-schema: {}
+    allowlist: []
+schema:
+  roles:
+    type: list
+    required: false
+    default: []
+    schema:
+      type: map
+      fields:
+        username: string
+        password: string
+        login: boolean
+  databases:
+    type: list
+    required: false
+    default: []
+    schema:
+      type: map
+      fields:
+        name: string
+        owner: string
+  memberships:
+    type: list
+    required: false
+    default: []
+    schema:
+      type: map
+      fields:
+        group: string
+        member: string
+  grants:
+    type: list
+    required: false
+    default: []
+    schema:
+      type: map
+      fields:
+        database: string
+        role: string
+        privileges:
+          type: list
+          schema:
+            type: string
+  ssl:
+    type: map
+    required: false
+    default:
+      enabled: false
+    fields:
+      enabled: boolean
+      certfile: string
+      keyfile: string
+  network:
+    type: map
+    required: false
+    default: {}
+    fields:
+      allowlist:
+        type: list
+        required: false
+        default: []
+        schema:
+          type: string
