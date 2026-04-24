@@ -1,5 +1,8 @@
 # PostgreSQL 18 Addon Progress
 
+**NOTE: This file tracks development progress only. It is NOT the operator source of truth.**
+Operator documentation lives in `docs/superpowers/runbooks/` and `DOCS.md`.
+
 ## Source Plan
 
 Primary plan: `docs/superpowers/plans/2026-04-19-postgresql18-addon.md`
@@ -48,7 +51,6 @@ Task 7: Completed in working tree, not committed
 
 Task 8: Completed in working tree, not committed
 - README and progress docs now reflect current integration status.
-- TLS implementation details and current TLS limitations are documented.
 
 ## TLS Implementation Notes
 
@@ -63,8 +65,8 @@ Main TLS behavior in the current add-on:
 
 Known TLS limitations still remaining:
 - No add-on options yet for CA bundle configuration, CRLs, or client-certificate authentication.
-- Test coverage currently proves encrypted transport with `sslmode=require`, not hostname verification or full chain validation.
-- The SSL integration path uses a short-lived self-signed certificate mounted into `/ssl`, so it validates add-on wiring and server-side TLS enablement more than end-to-end PKI management.
+- Test coverage currently proves encrypted transport (`sslmode=require`), includes a negative `verify-ca` check without a trusted CA, and validates `verify-full` hostname behavior (`localhost` success, `127.0.0.1` failure with a `localhost` cert). It does not cover full CA-chain validation.
+- The SSL integration path uses a short-lived self-signed certificate mounted into `/ssl` (test bypasses HA storage mapping), so it validates add-on wiring and server-side TLS enablement more than end-to-end PKI management.
 
 ## Working Tree Summary
 

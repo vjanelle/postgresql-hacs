@@ -1,13 +1,24 @@
 slug: postgresql18
 name: PostgreSQL 18
-version: "1.0.0"
-startup: auto
-image: "ghcr.io/example/postgresql18:latest"
+description: PostgreSQL 18 server with declarative provisioning for Home Assistant
+version: "0.1.0"
+url: "https://github.com/vjanelle/postgresql-hacs"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+  - armhf
+  - i386
+startup: services
+boot: auto
+init: false
 ports:
-  - "5432/tcp"
+  "5432/tcp": 5432
+ports_description:
+  "5432/tcp": PostgreSQL server
 map:
-  "/data": "/var/lib/postgresql/data"
-  "/ssl": "/etc/postgresql/ssl"
+  - type: ssl
+    read_only: true
 options:
   roles: []
   databases: []
@@ -19,63 +30,24 @@ options:
     allowlist: []
 schema:
   roles:
-    type: list
-    required: false
-    default: []
-    schema:
-      type: map
-      fields:
-        username: string
-        password: string
-        login: boolean
+    - username: str
+      password: password?
+      login: bool
   databases:
-    type: list
-    required: false
-    default: []
-    schema:
-      type: map
-      fields:
-        name: string
-        owner: string
+    - name: str
+      owner: str
   memberships:
-    type: list
-    required: false
-    default: []
-    schema:
-      type: map
-      fields:
-        group: string
-        member: string
+    - group: str
+      member: str
   grants:
-    type: list
-    required: false
-    default: []
-    schema:
-      type: map
-      fields:
-        database: string
-        role: string
-        privileges:
-          type: list
-          schema:
-            type: string
+    - database: str
+      role: str
+      privileges:
+        - str
   ssl:
-    type: map
-    required: false
-    default:
-      enabled: false
-    fields:
-      enabled: boolean
-      certfile: string
-      keyfile: string
+    enabled: bool
+    certfile: str?
+    keyfile: str?
   network:
-    type: map
-    required: false
-    default: {}
-    fields:
-      allowlist:
-        type: list
-        required: false
-        default: []
-        schema:
-          type: string
+    allowlist:
+      - str

@@ -53,7 +53,7 @@ Current implementation details:
 
 Current limitations:
 - The add-on currently exposes only server certificate and private key settings; there is no add-on option for CA bundles, CRLs, or client-certificate authentication.
-- The integration coverage proves encrypted transport with `sslmode=require`; it does not cover hostname verification or full certificate-chain validation.
+- The integration coverage verifies `sslmode=require`, a negative `verify-ca` case without a trusted CA, and `verify-full` hostname handling (success for `localhost`, failure for `127.0.0.1` with a `localhost` cert). It still does not cover full CA-chain validation workflows.
 - The SSL integration test uses a temporary self-signed certificate mounted into `/ssl`, so it verifies add-on wiring and PostgreSQL SSL negotiation rather than production PKI workflows.
 
 ## Integration Tests

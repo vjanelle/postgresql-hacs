@@ -8,16 +8,16 @@ Provisioning is additive-only: v1 creates missing roles, databases, memberships,
 
 ## Install In Home Assistant
 
-1. Add the repository containing this add-on to Home Assistant.
+1. Add `https://github.com/vjanelle/postgresql-hacs` to Home Assistant as the add-on repository.
 2. Open the add-on entry for PostgreSQL 18.
 3. Install the add-on.
 4. Confirm the configuration schema exposes:
-   - `roles`
-   - `databases`
-   - `memberships`
-   - `grants`
-   - `ssl`
-   - `network`
+   - `roles` (list of maps with `username`, `password`, `login`)
+   - `databases` (list of maps with `name`, `owner`)
+   - `memberships` (list of maps with `group`, `member`)
+   - `grants` (list of maps with `database`, `role`, `privileges`)
+   - `ssl` (map with `enabled`, `certfile`, `keyfile`)
+   - `network` (map with `allowlist` — list of CIDR strings)
 5. Do not start the add-on until a known-good config has been entered.
 
 ## Known-Good Minimal Config
@@ -36,16 +36,15 @@ memberships: []
 grants: []
 ssl:
   enabled: false
-  certfile: ""
-  keyfile: ""
 network:
-  allowlist:
-    - 127.0.0.1/32
+  allowlist: []
 ```
+
+When `network.allowlist` is empty, the add-on defaults to allowing only localhost connections (`127.0.0.1/32`, `::1/128`).
 
 ## TLS-Enabled Config
 
-When `ssl.enabled` is `true`, also provide `ssl.certfile` and `ssl.keyfile`. The cert file must be readable by the PostgreSQL runtime user, and the key file must be owned by the PostgreSQL runtime user with mode `400` or `600`.
+Enable SSL/TLS by setting `ssl.enabled` to `true` and providing certificate paths:
 
 ```yaml
 roles:
@@ -64,7 +63,13 @@ network:
     - 127.0.0.1/32
 ```
 
-Mount your SSL certificates into the add-on at `/ssl` via the Home Assistant storage mount configuration.
+In Home Assistant, enable the **SSL** storage mount for this add-on in the add-on UI. This maps the Home Assistant `/ssl` directory to `/ssl` inside the container. Place `server.crt` and `server.key` under `/ssl`.
+
+Requirements:
+- `ssl.certfile` must be readable by the PostgreSQL runtime user (postgres).
+- `ssl.keyfile` must be owned by the postgres user with mode `400` or `600`.
+
+When TLS is enabled, `pg_hba.conf` writes `hostssl` entries for each allowlist CIDR instead of `host`, enforcing encrypted connections. Local socket access remains `local all all trust`.
 
 ## Start And Verify
 
@@ -90,18 +95,19 @@ PGSSLMODE=require psql -h <host> -p 5432 -U app_login -d appdb
 
 ## Troubleshooting
 
-- **Add-on fails to start**: Check logs for provisioning errors. Ensure all required fields are present in your configuration.
-- **Cannot connect from client**: Verify the network allowlist includes your client's IP/CIDR range. Check that port 5432 is exposed.
-- **SSL connection failures**: When SSL is enabled, ensure `ssl.certfile` and `ssl.keyfile` point to valid files with correct permissions (cert readable by postgres user, key owned by postgres user with mode 400 or 600).
+- **Add-on fails to start**: Check logs for provisioning errors. Ensure all required fields are present in your configuration. When `ssl.enabled` is true, both `ssl.certfile` and `ssl.keyfile` must be set.
+- **Cannot connect from client**: Verify the network allowlist includes your client's IP/CIDR range. Check that port 5432 is exposed. Default allowlist (when empty) is only localhost (`127.0.0.1/32`, `::1/128`).
+- **SSL connection failures**: Ensure `ssl.certfile` and `ssl.keyfile` point to valid files with correct permissions. The cert must be readable by the postgres user; the key must be owned by postgres with mode 400 or 600. Verify the SSL storage mount is enabled in Home Assistant for this add-on.
 
 ## Limitations
 
-- Additive-only provisioning: v1 creates missing roles, databases, memberships, and grants. It does not remove or modify existing access drift — it emits warnings for undeclared memberships and privileges.
-- No CA bundle support: Only server certificate and private key settings are supported; no client-certificate authentication options.
-- Self-signed certs only in testing: The integration test uses temporary self-signed certificates; production PKI workflows require manual certificate management.
+- **Additive-only provisioning**: v1 creates missing roles, databases, memberships, and grants. It does not remove or modify existing access drift — it emits warnings for undeclared memberships and privileges.
+- **No CA bundle support**: Only server certificate and private key settings are supported; no add-on options for CA bundles, CRLs, or client-certificate authentication.
+- **Self-signed certs only in testing**: The integration test uses temporary self-signed certificates; production PKI workflows require manual certificate management.
+- **Limited certificate validation coverage**: Integration tests cover `sslmode=require`, a failing `verify-ca` path without a trusted CA, and `verify-full` hostname behavior for `localhost` vs `127.0.0.1`. They do not cover full CA-chain validation workflows.
 
 ## Backup And Upgrade Notes
 
-- PostgreSQL data lives at `/data/postgres` inside the container (mapped to `/data` on the host).
+- PostgreSQL data lives at `/var/lib/postgresql/data` inside the container, mapped to host `/data` via the add-on storage configuration.
 - Back up this directory before any upgrade or major configuration change.
 - When upgrading, run the old version's backup first, then install the new version pointing to the same data directory.

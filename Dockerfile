@@ -1,5 +1,15 @@
-ARG BUILD_FROM
+ARG BUILD_ARCH=amd64
+ARG BUILD_VERSION=0.1.0
+ARG BUILD_FROM=ghcr.io/home-assistant/${BUILD_ARCH}-base-debian:bookworm
 FROM ${BUILD_FROM}
+
+ARG BUILD_ARCH
+ARG BUILD_VERSION
+
+LABEL \
+    io.hass.version="${BUILD_VERSION}" \
+    io.hass.type="app" \
+    io.hass.arch="${BUILD_ARCH}"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
